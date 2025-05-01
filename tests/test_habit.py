@@ -2,6 +2,12 @@ import pytest
 from habit_tracker.habit_manager import HabitManager
 
 
+# @pytest.fixture(autouse=True)
+# def load_env_vars():
+#     load_dotenv(".env")
+#     yield
+
+
 def seed_habits(manager: HabitManager):
     manager.add_habit("10 min cardio")
     manager.add_habit("drink 2L of water")

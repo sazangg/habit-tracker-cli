@@ -1,9 +1,8 @@
-import json
 from pathlib import Path
 from typing import List, Union
-from filelock import FileLock
 
 from .models import Habit
+from .crypto import EncryptedJSONRepo
 
 
 class HabitManager:
@@ -59,22 +58,16 @@ class HabitManager:
 
 class HabitRepository:
     def __init__(self, path: Path):
-        self.path = Path(path)
+        self._path = Path(path)
 
     def load_habits(self) -> List[Habit]:
-        if not self.path.exists() or self.path.stat().st_size == 0:
-            return []
-
-        raw = json.loads(self.path.read_text() or "[]")
-        return [Habit.from_dict(h) for h in raw if h is not None]
+        json_data = EncryptedJSONRepo.load_data(self._path)
+        return [Habit.from_dict(h) for h in json_data if h is not None]
 
     def save_habits(self, habits: List[Habit]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         data = [h.to_dict() for h in habits]
 
-        lock = FileLock(self.path.with_suffix(".lock"))
-        with lock:
-            self.path.write_text(json.dumps(data, indent=2))
+        EncryptedJSONRepo.save_data(data, self._path)
 
     def append_log(self):
         pass

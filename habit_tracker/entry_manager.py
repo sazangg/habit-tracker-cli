@@ -7,6 +7,7 @@ from filelock import FileLock
 
 from .models import Entry
 from .habit_manager import HabitManager
+from .crypto import EncryptedJSONRepo
 
 
 class EntryManager:
@@ -51,19 +52,13 @@ class EntryRepository:
         self._path = Path(path)
 
     def load_entries(self) -> List[Entry]:
-        if not self._path.exists() or self._path.stat().st_size == 0:
-            return []
-
-        raw = json.loads(self._path.read_text() or "[]")
-        return [Entry.from_dict(e) for e in raw if e is not None]
+        json_data = EncryptedJSONRepo.load_data(self._path)
+        return [Entry.from_dict(e) for e in json_data if e is not None]
 
     def save_entries(self, entries: List[Entry]) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
         data = [e.to_dict() for e in entries]
 
-        lock = FileLock(self._path.with_suffix(".lock"))
-        with lock:
-            self._path.write_text(json.dumps(data, indent=2))
+        EncryptedJSONRepo.save_data(data, self._path)
 
     def append_log(self):
         pass

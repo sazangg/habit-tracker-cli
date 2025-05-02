@@ -1,7 +1,10 @@
 import csv
 from enum import Enum
+import json
 from pathlib import Path
 from typing import List, Union
+
+from filelock import FileLock
 
 from .models import Habit
 from .crypto import EncryptedJSONRepo
@@ -38,7 +41,15 @@ class HabitManager:
             raise ValueError(f"No habit to delete found for id: {habit_id}")
         self._habits.remove(habit_to_delete)
         self.save_habits()
+        self._repo.append_log(habit_to_delete)
         return habit_to_delete
+
+    def restore_last_habit(self) -> "Habit":
+        recovered_habit = self._repo.pop_log()
+        if self.find_habit_by_id(recovered_habit.id):
+            raise ValueError("Cannot undo - id already exists!")
+        self._habits.append(recovered_habit)
+        self.save_habits()
 
     def archive_habit_by_id(self, habit_id: str) -> "Habit":
         habit_to_archive = self.find_habit_by_id(habit_id)
@@ -119,8 +130,20 @@ class HabitRepository:
             dict_reader = csv.DictReader(f)
             return [Habit.from_dict(row) for row in dict_reader if row]
 
-    def append_log(self):
-        pass
+    def append_log(self, habit_to_log: Habit) -> None:
+        log_path = self._path.with_suffix("").with_suffix(".log")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        lock = FileLock(log_path.with_suffix(".lock"))
+        with lock, log_path.open(mode="a", newline="", encoding="utf-8") as f:
+            f.write(json.dumps(habit_to_log.to_dict()) + "\n")
 
-    def pop_log(self):
-        pass
+    def pop_log(self) -> "Habit":
+        log_path = self._path.with_suffix("").with_suffix(".log")
+        if not log_path.exists() or log_path.stat().st_size == 0:
+            raise ValueError("Nothing to undo")
+        lines = log_path.read_text().splitlines()
+        last, *rest = lines[::-1]
+        lock = FileLock(log_path.with_suffix(".lock"))
+        with lock:
+            log_path.write_text("\n".join(rest[::-1]) + ("\n" if rest else ""))
+        return Habit.from_dict(json.loads(last))

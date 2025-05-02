@@ -21,6 +21,7 @@ class Habit:
     def from_dict(cls, d: dict) -> "Habit":
         habit = d.copy()
         habit["created_at"] = datetime.fromisoformat(d["created_at"])
+        habit["priority"] = int(d["priority"])
         return cls(**habit)
 
 

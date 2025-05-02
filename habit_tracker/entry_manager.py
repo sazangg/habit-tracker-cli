@@ -1,3 +1,4 @@
+import csv
 from datetime import date
 import json
 from pathlib import Path
@@ -6,7 +7,7 @@ from typing import List, Union
 from filelock import FileLock
 
 from .models import Entry
-from .habit_manager import HabitManager
+from .habit_manager import HabitManager, IMPORT_MODE
 from .crypto import EncryptedJSONRepo
 
 
@@ -46,6 +47,32 @@ class EntryManager:
                 return entry
         return None
 
+    def export_entries(self) -> None:
+        field_names = ['id', 'habit_id', 'date_', 'note']
+        data = [e.to_dict() for e in self._entries]
+        self._repo.export_entries_to_csv(data, field_names=field_names)
+
+    def import_entries(self, mode: IMPORT_MODE = IMPORT_MODE.add) -> None:
+        imported_entries = self._repo.import_entries_from_csv()
+
+        if mode == IMPORT_MODE.add:
+            for entry in imported_entries:
+                if not self.find_entry_by_id(entry.id):
+                    self._entries.append(entry)
+        elif mode == IMPORT_MODE.merge:
+            for entry in imported_entries:
+                existing_entry = self.find_entry_by_id(entry.id)
+                if existing_entry:
+                    existing_entry.habit_id = entry.habit_id
+                    existing_entry.date_ = entry.date_
+                    existing_entry.note = entry.note
+                else:
+                    self._entries.append(entry)
+        elif mode == IMPORT_MODE.replace:
+            self._entries = imported_entries
+
+        self.save_entries()
+
 
 class EntryRepository:
     def __init__(self, path: Path):
@@ -59,6 +86,21 @@ class EntryRepository:
         data = [e.to_dict() for e in entries]
 
         EncryptedJSONRepo.save_data(data, self._path)
+
+    def export_entries_to_csv(self, entries_dict, field_names) -> None:
+        with self._path.with_suffix("").with_suffix(".csv").open(mode="w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=field_names)
+            writer.writeheader()
+            writer.writerows(entries_dict)
+
+    def import_entries_from_csv(self) -> List[Entry]:
+        csv_path = self._path.with_suffix("").with_suffix(".csv")
+        if not csv_path.exists() or csv_path.stat().st_size == 0:
+            return []
+
+        with csv_path.open(mode="r", newline="", encoding="utf-8") as f:
+            dict_reader = csv.DictReader(f)
+            return [Entry.from_dict(row) for row in dict_reader if row]
 
     def append_log(self):
         pass

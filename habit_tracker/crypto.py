@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from filelock import FileLock
 from dotenv import load_dotenv
 
@@ -47,7 +47,10 @@ class EncryptedJSONRepo:
         file_bytes = path.read_bytes()
         salt, cipher_text = file_bytes[:16], file_bytes[16:]
         f = new_fernet(passphrase, salt)
-        plain_text = f.decrypt(cipher_text)
+        try:
+            plain_text = f.decrypt(cipher_text)
+        except InvalidToken as e:
+            raise ValueError("Wrong pass-phrase or corrupted file.") from e
 
         return json.loads(plain_text.decode())
 

@@ -1,8 +1,16 @@
+import csv
+from enum import Enum
 from pathlib import Path
 from typing import List, Union
 
 from .models import Habit
 from .crypto import EncryptedJSONRepo
+
+
+class IMPORT_MODE(Enum):
+    add = "add"
+    replace = "replace"
+    merge = "merge"
 
 
 class HabitManager:
@@ -55,6 +63,33 @@ class HabitManager:
     def is_duplicate_habit(self, name: str) -> bool:
         return name.lower() in [h.name.lower() for h in self._habits]
 
+    def export_habits(self) -> None:
+        field_names = ['id', 'name', 'priority', 'archived', 'created_at']
+        data = [h.to_dict() for h in self._habits]
+        self._repo.export_habits_to_csv(data, field_names=field_names)
+
+    def import_habits(self, mode: IMPORT_MODE = IMPORT_MODE.add) -> None:
+        imported_habits = self._repo.import_habits_from_csv()
+
+        if mode == IMPORT_MODE.add:
+            for habit in imported_habits:
+                if not self.find_habit_by_id(habit.id):
+                    self._habits.append(habit)
+        elif mode == IMPORT_MODE.merge:
+            for habit in imported_habits:
+                existing_habit = self.find_habit_by_id(habit.id)
+                if existing_habit:
+                    existing_habit.name = habit.name
+                    existing_habit.priority = habit.priority
+                    existing_habit.archived = habit.archived
+                    existing_habit.created_at = habit.created_at
+                else:
+                    self._habits.append(habit)
+        elif mode == IMPORT_MODE.replace:
+            self._habits = imported_habits
+
+        self.save_habits()
+
 
 class HabitRepository:
     def __init__(self, path: Path):
@@ -68,6 +103,21 @@ class HabitRepository:
         data = [h.to_dict() for h in habits]
 
         EncryptedJSONRepo.save_data(data, self._path)
+
+    def export_habits_to_csv(self, habits_dict, field_names) -> None:
+        with self._path.with_suffix("").with_suffix(".csv").open(mode="w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=field_names)
+            writer.writeheader()
+            writer.writerows(habits_dict)
+
+    def import_habits_from_csv(self) -> List[Habit]:
+        csv_path = self._path.with_suffix("").with_suffix(".csv")
+        if not csv_path.exists() or csv_path.stat().st_size == 0:
+            return []
+
+        with csv_path.open(mode="r", newline="", encoding="utf-8") as f:
+            dict_reader = csv.DictReader(f)
+            return [Habit.from_dict(row) for row in dict_reader if row]
 
     def append_log(self):
         pass

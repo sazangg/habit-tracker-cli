@@ -39,7 +39,15 @@ class EntryManager:
             raise ValueError(f"No habit to delete found for id: {entry_id}")
         self._entries.remove(entry_to_delete)
         self.save_entries()
+        self._repo.append_log(entry_to_delete)
         return entry_to_delete
+
+    def restore_last_entry(self) -> "Entry":
+        recovered_entry = self._repo.pop_log()
+        if self.find_entry_by_id(recovered_entry.id):
+            raise ValueError("Cannot undo - id already exists!")
+        self._entries.append(recovered_entry)
+        self.save_entries()
 
     def find_entry_by_id(self, entry_id: str) -> Union[Entry, None]:
         for entry in self._entries:
@@ -102,8 +110,20 @@ class EntryRepository:
             dict_reader = csv.DictReader(f)
             return [Entry.from_dict(row) for row in dict_reader if row]
 
-    def append_log(self):
-        pass
+    def append_log(self, entry_to_log: Entry) -> None:
+        log_path = self._path.with_suffix("").with_suffix(".log")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        lock = FileLock(log_path.with_suffix(".lock"))
+        with lock, log_path.open(mode="a", newline="", encoding="utf-8") as f:
+            f.write(json.dumps(entry_to_log.to_dict()) + "\n")
 
-    def pop_log(self):
-        pass
+    def pop_log(self) -> "Entry":
+        log_path = self._path.with_suffix("").with_suffix(".log")
+        if not log_path.exists() or log_path.stat().st_size == 0:
+            raise ValueError("Nothing to undo")
+        lines = log_path.read_text().splitlines()
+        last, *rest = lines[::-1]
+        lock = FileLock(log_path.with_suffix(".lock"))
+        with lock:
+            log_path.write_text("\n".join(rest[::-1]) + ("\n" if rest else ""))
+        return Entry.from_dict(json.loads(last))

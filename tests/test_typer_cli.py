@@ -40,3 +40,10 @@ def test_cli_add_and_list(tmp_path):
 
     data = json.loads(out.stdout)
     assert data[0]["name"] == "pray 5 times"
+
+
+def test_cli_duplicate(tmp_path):
+    run_cli(tmp_path, "habit", "add", "pray")
+    dup = run_cli(tmp_path, "habit", "add", "pray")
+    assert dup.returncode == 1
+    assert "already exists" in dup.stderr

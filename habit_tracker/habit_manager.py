@@ -50,6 +50,7 @@ class HabitManager:
             raise ValueError("Cannot undo - id already exists!")
         self._habits.append(recovered_habit)
         self.save_habits()
+        return recovered_habit
 
     def archive_habit_by_id(self, habit_id: str) -> "Habit":
         habit_to_archive = self.find_habit_by_id(habit_id)
@@ -99,6 +100,10 @@ class HabitManager:
         elif mode == IMPORT_MODE.replace:
             self._habits = imported_habits
 
+        self.save_habits()
+
+    def delete_all_habits(self) -> None:
+        self._habits = []
         self.save_habits()
 
 

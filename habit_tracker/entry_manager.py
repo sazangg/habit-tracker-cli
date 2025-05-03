@@ -48,6 +48,7 @@ class EntryManager:
             raise ValueError("Cannot undo - id already exists!")
         self._entries.append(recovered_entry)
         self.save_entries()
+        return recovered_entry
 
     def find_entry_by_id(self, entry_id: str) -> Union[Entry, None]:
         for entry in self._entries:

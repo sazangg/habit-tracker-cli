@@ -2,12 +2,6 @@ import pytest
 from habit_tracker.habit_manager import HabitManager
 
 
-# @pytest.fixture(autouse=True)
-# def load_env_vars():
-#     load_dotenv(".env")
-#     yield
-
-
 def seed_habits(manager: HabitManager):
     manager.add_habit("10 min cardio")
     manager.add_habit("drink 2L of water")
@@ -67,3 +61,13 @@ def test_archive_habit(tmp_path):
 
     new_habit = hm.archive_habit_by_id(new_habit.id)
     assert new_habit.archived == True
+
+
+def test_undo_last_delete(tmp_path):
+    hm = HabitManager(tmp_path/"h.json")
+    h1 = hm.add_habit("cardio")
+    hm.delete_habit(h1.id)
+    assert hm.list_habits() == []
+    restored = hm.restore_last_habit()
+    assert restored.id == h1.id
+    assert len(hm.list_habits()) == 1

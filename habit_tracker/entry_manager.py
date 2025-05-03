@@ -56,31 +56,35 @@ class EntryManager:
                 return entry
         return None
 
-    def export_entries(self) -> None:
+    def export_entries(self, export_path: Path | None = None) -> None:
         field_names = ['id', 'habit_id', 'date_', 'note']
         data = [e.to_dict() for e in self._entries]
-        self._repo.export_entries_to_csv(data, field_names=field_names)
+        return self._repo.export_entries_to_csv(data, field_names, export_path)
 
-    def import_entries(self, mode: IMPORT_MODE = IMPORT_MODE.add) -> None:
+    def import_entries(self, mode: IMPORT_MODE = IMPORT_MODE.add):
         imported_entries = self._repo.import_entries_from_csv()
-
+        imported_stats = {"added": 0, "updated": 0, "replaced": 0}
         if mode == IMPORT_MODE.add:
             for entry in imported_entries:
                 if not self.find_entry_by_id(entry.id):
                     self._entries.append(entry)
+                    imported_stats["added"] += 1
         elif mode == IMPORT_MODE.merge:
             for entry in imported_entries:
                 existing_entry = self.find_entry_by_id(entry.id)
                 if existing_entry:
-                    existing_entry.habit_id = entry.habit_id
-                    existing_entry.date_ = entry.date_
-                    existing_entry.note = entry.note
+                    existing_entry.__dict__.update(entry.__dict__)
+                    imported_stats["updated"] += 1
                 else:
                     self._entries.append(entry)
+                    imported_stats["added"] += 1
         elif mode == IMPORT_MODE.replace:
+            imported_stats["replaced"] = len(self._entries)
+            imported_stats["added"] = len(imported_entries)
             self._entries = imported_entries
 
         self.save_entries()
+        return imported_stats
 
 
 class EntryRepository:
@@ -96,11 +100,17 @@ class EntryRepository:
 
         EncryptedJSONRepo.save_data(data, self._path)
 
-    def export_entries_to_csv(self, entries_dict, field_names) -> None:
-        with self._path.with_suffix("").with_suffix(".csv").open(mode="w", newline="", encoding="utf-8") as f:
+    def export_entries_to_csv(self, entries_dict, field_names, export_path: Path | None = None) -> Path:
+        target = (export_path or self._path.with_suffix(
+            "")).with_suffix(".csv")
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+        with target.open(mode="w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=field_names)
             writer.writeheader()
             writer.writerows(entries_dict)
+
+        return target
 
     def import_entries_from_csv(self) -> List[Entry]:
         csv_path = self._path.with_suffix("").with_suffix(".csv")

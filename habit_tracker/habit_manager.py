@@ -75,32 +75,35 @@ class HabitManager:
     def is_duplicate_habit(self, name: str) -> bool:
         return name.lower() in [h.name.lower() for h in self._habits]
 
-    def export_habits(self) -> None:
+    def export_habits(self, export_path: Path | None = None) -> Path:
         field_names = ['id', 'name', 'priority', 'archived', 'created_at']
         data = [h.to_dict() for h in self._habits]
-        self._repo.export_habits_to_csv(data, field_names=field_names)
+        return self._repo.export_habits_to_csv(data, field_names, export_path)
 
-    def import_habits(self, mode: IMPORT_MODE = IMPORT_MODE.add) -> None:
+    def import_habits(self, mode: IMPORT_MODE = IMPORT_MODE.add):
         imported_habits = self._repo.import_habits_from_csv()
-
+        imported_stats = {"added": 0, "updated": 0, "replaced": 0}
         if mode == IMPORT_MODE.add:
             for habit in imported_habits:
                 if not self.find_habit_by_id(habit.id):
                     self._habits.append(habit)
+                    imported_stats["added"] += 1
         elif mode == IMPORT_MODE.merge:
             for habit in imported_habits:
                 existing_habit = self.find_habit_by_id(habit.id)
                 if existing_habit:
-                    existing_habit.name = habit.name
-                    existing_habit.priority = habit.priority
-                    existing_habit.archived = habit.archived
-                    existing_habit.created_at = habit.created_at
+                    existing_habit.__dict__.update(habit.__dict__)
+                    imported_stats["updated"] += 1
                 else:
                     self._habits.append(habit)
+                    imported_stats["added"] += 1
         elif mode == IMPORT_MODE.replace:
+            imported_stats["replaced"] = len(self._habits)
+            imported_stats["added"] = len(imported_habits)
             self._habits = imported_habits
 
         self.save_habits()
+        return imported_stats
 
     def delete_all_habits(self) -> None:
         self._habits = []
@@ -120,11 +123,17 @@ class HabitRepository:
 
         EncryptedJSONRepo.save_data(data, self._path)
 
-    def export_habits_to_csv(self, habits_dict, field_names) -> None:
-        with self._path.with_suffix("").with_suffix(".csv").open(mode="w", newline="", encoding="utf-8") as f:
+    def export_habits_to_csv(self, habits_dict, field_names, export_path: Path | None = None) -> Path:
+        target = (export_path or self._path.with_suffix(
+            "")).with_suffix(".csv")
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+        with target.open(mode="w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=field_names)
             writer.writeheader()
             writer.writerows(habits_dict)
+
+        return target
 
     def import_habits_from_csv(self) -> List[Habit]:
         csv_path = self._path.with_suffix("").with_suffix(".csv")
